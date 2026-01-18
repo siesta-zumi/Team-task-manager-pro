@@ -30,6 +30,11 @@ export async function getTasks(): Promise<Task[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
+    // Supabase未接続時は空配列を返す
+    if (error.message?.includes('fetch failed') || error.message?.includes('ENOTFOUND')) {
+      console.warn('⚠️ Supabase未接続: モックデータで動作中');
+      return [];
+    }
     console.error('Error fetching tasks:', error);
     throw error;
   }

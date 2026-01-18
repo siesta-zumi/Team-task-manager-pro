@@ -2,8 +2,20 @@ import { supabase } from './supabase';
 import { AssigneeRole } from '@/types';
 import type { Task, TaskCreate, TaskUpdate, Status, RecurringType } from '@/types';
 
+// プレースホルダー値かどうかをチェック
+const isPlaceholderUrl = 
+  process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder') || 
+  !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co';
+
 // タスク一覧取得（担当者・サブタスク含む）
 export async function getTasks(): Promise<Task[]> {
+  // プレースホルダー値の場合は即座に空配列を返す（Supabase接続を試みない）
+  if (isPlaceholderUrl) {
+    console.info('📝 プレースホルダー値検出: モックデータを使用します');
+    return [];
+  }
+
   const { data: tasks, error } = await supabase
     .from('tasks')
     .select(`
@@ -30,12 +42,47 @@ export async function getTasks(): Promise<Task[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
+    // エラーオブジェクトの詳細を取得
+    const errorMessage = error.message || '';
+    const errorCode = error.code || '';
+    const errorDetails = error.details || '';
+    const errorHint = error.hint || '';
+    
+    // エラーオブジェクト全体を文字列化（デバッグ用）
+    let errorString = '';
+    try {
+      errorString = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    } catch {
+      errorString = String(error);
+    }
+
+    // エラーメッセージを正規化（複数のソースから取得）
+    const normalizedError = errorMessage || errorCode || errorDetails || errorHint || errorString;
+
     // Supabase未接続時は空配列を返す
-    if (error.message?.includes('fetch failed') || error.message?.includes('ENOTFOUND')) {
-      console.warn('⚠️ Supabase未接続: モックデータで動作中');
+    if (
+      normalizedError.includes('fetch failed') || 
+      normalizedError.includes('ENOTFOUND') ||
+      normalizedError.includes('placeholder') ||
+      normalizedError === '{}' ||
+      !normalizedError
+    ) {
+      console.warn('⚠️ Supabase未接続: モックデータで動作中', {
+        message: errorMessage,
+        code: errorCode,
+        details: errorDetails
+      });
       return [];
     }
-    console.error('Error fetching tasks:', error);
+    
+    // その他のエラーは詳細をログに記録してからスロー
+    console.error('Error fetching tasks:', {
+      message: errorMessage,
+      code: errorCode,
+      details: errorDetails,
+      hint: errorHint,
+      fullError: errorString
+    });
     throw error;
   }
 
@@ -44,6 +91,12 @@ export async function getTasks(): Promise<Task[]> {
 
 // 単一タスク取得
 export async function getTask(id: string): Promise<Task> {
+  // プレースホルダー値の場合はエラーをスロー（モックデータは呼び出し側で処理）
+  if (isPlaceholderUrl) {
+    console.info('📝 プレースホルダー値検出: getTaskはモックデータを返しません');
+    throw new Error('Supabase未接続: モックデータ環境ではタスク詳細を取得できません');
+  }
+
   const { data, error } = await supabase
     .from('tasks')
     .select(`
@@ -71,7 +124,49 @@ export async function getTask(id: string): Promise<Task> {
     .single();
 
   if (error) {
-    console.error('Error fetching task:', error);
+    // エラーオブジェクトの詳細を取得
+    const errorMessage = error.message || '';
+    const errorCode = error.code || '';
+    const errorDetails = error.details || '';
+    const errorHint = error.hint || '';
+    
+    // エラーオブジェクト全体を文字列化（デバッグ用）
+    let errorString = '';
+    try {
+      errorString = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    } catch {
+      errorString = String(error);
+    }
+
+    // エラーメッセージを正規化（複数のソースから取得）
+    const normalizedError = errorMessage || errorCode || errorDetails || errorHint || errorString;
+
+    // Supabase未接続時は適切なエラーメッセージをスロー
+    if (
+      normalizedError.includes('fetch failed') || 
+      normalizedError.includes('ENOTFOUND') ||
+      normalizedError.includes('placeholder') ||
+      normalizedError === '{}' ||
+      !normalizedError
+    ) {
+      console.warn('⚠️ Supabase未接続: タスク詳細を取得できません', {
+        message: errorMessage,
+        code: errorCode,
+        details: errorDetails,
+        taskId: id
+      });
+      throw new Error('Supabase未接続: タスク詳細を取得できません');
+    }
+    
+    // その他のエラーは詳細をログに記録してからスロー
+    console.error('Error fetching task:', {
+      message: errorMessage,
+      code: errorCode,
+      details: errorDetails,
+      hint: errorHint,
+      fullError: errorString,
+      taskId: id
+    });
     throw error;
   }
 
@@ -79,7 +174,13 @@ export async function getTask(id: string): Promise<Task> {
 }
 
 // タスク作成
-export async function createTask(task: TaskCreate) {
+export async function createTask(task: TaskCreate): Promise<Task> {
+  // プレースホルダー値の場合はエラーをスロー（モックデータは呼び出し側で処理）
+  if (isPlaceholderUrl) {
+    console.info('📝 プレースホルダー値検出: createTaskはモックデータを返しません');
+    throw new Error('Supabase未接続: モックデータ環境ではタスクを作成できません');
+  }
+
   const { data, error } = await supabase
     .from('tasks')
     .insert({
@@ -94,15 +195,75 @@ export async function createTask(task: TaskCreate) {
       link: task.link ?? null,
       communication_link: task.communication_link ?? null,
     })
-    .select()
+    .select(`
+      *,
+      subtasks (
+        id,
+        task_id,
+        text,
+        completed,
+        order_index
+      ),
+      task_assignments (
+        task_id,
+        member_id,
+        role,
+        workload_ratio,
+        members (
+          id,
+          name,
+          avatar
+        )
+      )
+    `)
     .single();
 
   if (error) {
-    console.error('Error creating task:', error);
+    // エラーオブジェクトの詳細を取得
+    const errorMessage = error.message || '';
+    const errorCode = error.code || '';
+    const errorDetails = error.details || '';
+    const errorHint = error.hint || '';
+    
+    // エラーオブジェクト全体を文字列化（デバッグ用）
+    let errorString = '';
+    try {
+      errorString = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    } catch {
+      errorString = String(error);
+    }
+
+    // エラーメッセージを正規化（複数のソースから取得）
+    const normalizedError = errorMessage || errorCode || errorDetails || errorHint || errorString;
+
+    // Supabase未接続時は適切なエラーメッセージをスロー
+    if (
+      normalizedError.includes('fetch failed') || 
+      normalizedError.includes('ENOTFOUND') ||
+      normalizedError.includes('placeholder') ||
+      normalizedError === '{}' ||
+      !normalizedError
+    ) {
+      console.warn('⚠️ Supabase未接続: タスクを作成できません', {
+        message: errorMessage,
+        code: errorCode,
+        details: errorDetails
+      });
+      throw new Error('Supabase未接続: タスクを作成できません');
+    }
+    
+    // その他のエラーは詳細をログに記録してからスロー
+    console.error('Error creating task:', {
+      message: errorMessage,
+      code: errorCode,
+      details: errorDetails,
+      hint: errorHint,
+      fullError: errorString
+    });
     throw error;
   }
 
-  return data;
+  return transformTask(data);
 }
 
 // タスク更新

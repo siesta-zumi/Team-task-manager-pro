@@ -5,11 +5,11 @@ import type { Task } from '@/types';
 
 interface TaskTableProps {
   tasks: Task[];
-  onTaskClick?: (task: Task) => void;
+  onTaskClick?: (taskId: string) => void;
 }
 
 const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskClick }) => {
-  // ステータスに応じた色を返す
+  // ステータスに応じた色を返す（Status enumの値を受け取る）
   const getStatusColor = (status: string) => {
     switch (status) {
       case '未着手':
@@ -69,7 +69,7 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskClick }) => {
               tasks.map((task) => (
                 <tr
                   key={task.id}
-                  onClick={() => onTaskClick?.(task)}
+                  onClick={() => onTaskClick?.(task.id)}
                   className="hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <td className="px-6 py-4 whitespace-nowrap">

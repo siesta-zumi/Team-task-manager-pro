@@ -3,6 +3,7 @@ export enum Status {
   NotStarted = '未着手',
   InProgress = '進行中',
   Completed = '完了',
+  Approved = '承認済み',
 }
 
 // 繰り返しタイプEnum

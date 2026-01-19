@@ -7,8 +7,8 @@
 ## 📊 現在の未解決課題
 
 **未解決数**: 0件
-**解決済み**: 3件
-**総課題数**: 3件
+**解決済み**: 4件
+**総課題数**: 4件
 
 ---
 
@@ -218,6 +218,69 @@ Error fetching task: {}
 
 ---
 
+### ISSUE-004: npm install lucide-react実行時に325パッケージが削除される依存関係破損
+
+**ステータス**: 🟢 解決済み
+**優先度**: 高
+**発生日**: 2026-01-19
+**解決日**: 2026-01-19
+**報告者**: システム（npm install実行時）
+**担当者**: Claude Sonnet 4.5
+
+**問題内容**:
+```
+npm install lucide-react
+# removed 325 packages
+# Cannot find module 'tailwindcss'
+```
+
+タスク一覧ページに戻るボタンを追加するため、`lucide-react`をインストールしたところ、325個のパッケージが削除され、`tailwindcss`を含む重要な依存関係が失われた。
+
+**発生箇所**:
+- コマンド: `npm install lucide-react`
+- 影響範囲: プロジェクト全体の依存関係
+- エラー: `Cannot find module 'tailwindcss'`、`Cannot find module 'lucide-react'`
+
+**エラーログ**:
+```
+npm install lucide-react
+added 1 packages, removed 325 packages
+
+Error: Cannot find module 'tailwindcss'
+Module not found: Can't resolve 'lucide-react'
+```
+
+**原因**:
+1. `npm install lucide-react`実行時に、package.jsonの依存関係が意図せず変更された
+2. 325個のパッケージが削除され、tailwindcss、postcss、autoprefixerなどの重要な開発依存関係が失われた
+3. lucide-reactのインストールに伴う依存関係の競合が発生した可能性
+
+**実施した対応**:
+
+1. ✅ 開発サーバーを停止
+2. ✅ `npm install`を再実行して全依存関係を復元
+   - 325パッケージが再インストールされ、依存関係が正常化
+3. ✅ 開発サーバーを再起動して動作確認
+4. ✅ タスク一覧ページの戻るボタンが正常に動作することを確認
+5. ✅ ISSUE.mdに今回の問題を記録
+
+**動作確認結果**:
+- ✅ すべての依存関係が復元された（360パッケージ）
+- ✅ lucide-reactが正常にインストールされた
+- ✅ tailwindcssが正常に動作
+- ✅ 戻るボタンのアイコンが正常に表示
+- ✅ ページ遷移が正常に動作
+
+**再発防止策**:
+- 依存関係の追加時は`npm install`のログを注意深く確認する
+- パッケージが大量に削除される場合は、即座に`npm install`で復元する
+- 依存関係が壊れた状態でコミットしない
+
+**関連Issue**: なし
+**関連コミット**: 次回コミット予定（2026-01-19）
+
+---
+
 ## 📋 既知の制限事項（Issue扱いではない）
 
 ### LIMIT-001: Windows環境でのプロダクションビルドエラー
@@ -335,6 +398,7 @@ Windows環境でのNext.js 15 + TailwindCSS v3 + nanoid/PostCSSの互換性問�
 
 ### Phase 5: UI実装 - タスク詳細モーダル（進行中）
 - **ISSUE-003**: タスク詳細モーダルでタスク取得に失敗する（✅ 解決済み - エラーハンドリング改善、モックデータ対応）
+- **ISSUE-004**: npm install lucide-react実行時に325パッケージが削除される依存関係破損（✅ 解決済み - npm install再実行で復元）
 
 ### Phase 6〜14: その他フェーズ（未着手）
 - 未実装
@@ -345,18 +409,18 @@ Windows環境でのNext.js 15 + TailwindCSS v3 + nanoid/PostCSSの互換性問�
 
 ### 月別Issue発生数
 
-**2026年1月**: 3件（未解決: 0件、解決済み: 3件）
+**2026年1月**: 4件（未解決: 0件、解決済み: 4件）
 
 ### 優先度別
 
 - 緊急: 0件
-- 高: 1件（解決済み）
+- 高: 2件（解決済み）
 - 中: 2件（解決済み）
 - 低: 0件
 
 ### カテゴリ別
 
-- 環境設定: 1件（解決済み）
+- 環境設定: 2件（解決済み）
 - バグ: 2件（解決済み）
 - UI/UX: 0件
 - パフォーマンス: 0件
@@ -364,5 +428,5 @@ Windows環境でのNext.js 15 + TailwindCSS v3 + nanoid/PostCSSの互換性問�
 
 ---
 
-*最終更新: 2026-01-19 (ISSUE-003解決)*
+*最終更新: 2026-01-19 (ISSUE-004解決)*
 *管理者: Claude Sonnet 4.5*

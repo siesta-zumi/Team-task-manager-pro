@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { getTasks } from '@/lib/tasks';
 import TaskTable from '@/components/TaskTable';
 import TaskModal from '@/components/TaskModal';
@@ -327,6 +329,17 @@ export default function TasksPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* 戻るボタン */}
+        <div className="mb-4">
+          <Link
+            href="/"
+            className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            ホームへ戻る
+          </Link>
+        </div>
+
         {/* ヘッダー */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">タスク一覧</h1>

@@ -18,6 +18,18 @@ export default function Home() {
           >
             タスク一覧へ
           </Link>
+          <Link
+            href="/members"
+            className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
+          >
+            メンバー管理へ
+          </Link>
+          <Link
+            href="/calendar"
+            className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 transition-colors"
+          >
+            カレンダーへ
+          </Link>
         </div>
 
         <p className="mt-8 text-sm text-gray-500">

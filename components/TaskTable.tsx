@@ -6,9 +6,21 @@ import type { Task } from '@/types';
 interface TaskTableProps {
   tasks: Task[];
   onTaskClick?: (taskId: string) => void;
+  sortColumn?: 'title' | 'status' | 'end_date' | 'progress' | null;
+  sortDirection?: 'ascending' | 'descending';
+  onSort?: (column: 'title' | 'status' | 'end_date' | 'progress') => void;
 }
 
-const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskClick }) => {
+const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskClick, sortColumn, sortDirection, onSort }) => {
+  // ソートインジケーターを表示するヘルパー関数
+  const renderSortIndicator = (column: 'title' | 'status' | 'end_date' | 'progress') => {
+    if (sortColumn !== column) return null;
+    return (
+      <span className="ml-1">
+        {sortDirection === 'ascending' ? '↑' : '↓'}
+      </span>
+    );
+  };
   // ステータスに応じた色を返す（Status enumの値を受け取る）
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -38,20 +50,32 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskClick }) => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                タスク名
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => onSort?.('title')}
+              >
+                タスク名{renderSortIndicator('title')}
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ステータス
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => onSort?.('status')}
+              >
+                ステータス{renderSortIndicator('status')}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 担当者
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                進捗率
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => onSort?.('progress')}
+              >
+                進捗率{renderSortIndicator('progress')}
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                期間
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => onSort?.('end_date')}
+              >
+                期間{renderSortIndicator('end_date')}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 スコア

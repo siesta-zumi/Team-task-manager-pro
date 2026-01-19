@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { getTask, updateTask, createTask } from '@/lib/tasks';
-import type { Task, TaskUpdate, TaskCreate } from '@/types';
+import { getSubtasks, createSubtask, updateSubtask, deleteSubtask, recalculateTaskProgress } from '@/lib/subtasks';
+import type { Task, TaskUpdate, TaskCreate, Subtask } from '@/types';
 import { Status, RecurringType } from '@/types';
 
 interface TaskModalProps {
@@ -19,6 +20,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // チェックリスト（サブタスク）の状態
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [newSubtaskText, setNewSubtaskText] = useState('');
+  const [subtaskLoading, setSubtaskLoading] = useState(false);
 
   // フォーム状態
   const [formData, setFormData] = useState<TaskUpdate>({
@@ -104,6 +110,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
                   link: foundTask.link || '',
                   communication_link: foundTask.communication_link || '',
                 });
+                // モックデータ環境では、タスクに含まれるsubtasksを使用
+                setSubtasks(foundTask.subtasks || []);
                 setError(null);
                 return;
               }
@@ -126,6 +134,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
         // 新規作成モード：初期値を設定
         setTask(null);
         setLoading(false);
+        setSubtasks([]);
         
         const today = new Date();
         const oneWeekLater = new Date();
@@ -146,6 +155,44 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
       }
     }
   }, [isOpen, taskId, tasks]);
+
+  // サブタスクの取得（既存タスクの場合）
+  useEffect(() => {
+    if (isOpen && taskId && task) {
+      const fetchSubtasks = async () => {
+        // タスクに既にsubtasksが含まれている場合はそれを使用
+        if (task.subtasks && task.subtasks.length > 0) {
+          setSubtasks(task.subtasks);
+          return;
+        }
+
+        // モックデータ環境の場合はスキップ
+        const isPlaceholderUrl = 
+          process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder') || 
+          !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+          process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co';
+        
+        if (isPlaceholderUrl) {
+          setSubtasks([]);
+          return;
+        }
+
+        try {
+          const subtasksData = await getSubtasks(taskId);
+          setSubtasks(subtasksData);
+        } catch (e) {
+          console.error('Error fetching subtasks:', e);
+          // エラー時は空配列を設定（既存のsubtasksがあればそれを使用）
+          setSubtasks(task.subtasks || []);
+        }
+      };
+
+      fetchSubtasks();
+    } else if (!taskId) {
+      // 新規作成モードでは空配列
+      setSubtasks([]);
+    }
+  }, [isOpen, taskId, task]);
 
   // ESCキーでモーダルを閉じる
   useEffect(() => {
@@ -272,6 +319,137 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // サブタスクの追加
+  const handleAddSubtask = async () => {
+    if (!newSubtaskText.trim() || !taskId) return;
+
+    setSubtaskLoading(true);
+    try {
+      const isPlaceholderUrl = 
+        process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder') || 
+        !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co';
+
+      if (isPlaceholderUrl) {
+        // モックデータ環境：ローカルstateに追加
+        const newSubtask: Subtask = {
+          id: `mock-${Date.now()}`,
+          task_id: taskId,
+          text: newSubtaskText.trim(),
+          completed: false,
+          order_index: subtasks.length,
+        };
+        setSubtasks([...subtasks, newSubtask]);
+        setNewSubtaskText('');
+        setToast({ message: 'サブタスクを追加しました（モックデータ）', type: 'success' });
+        return;
+      }
+
+      const newSubtask = await createSubtask(taskId, newSubtaskText.trim(), subtasks.length);
+      setSubtasks([...subtasks, newSubtask]);
+      setNewSubtaskText('');
+      setToast({ message: 'サブタスクを追加しました', type: 'success' });
+      
+      // 進捗率を再計算
+      if (taskId) {
+        await recalculateTaskProgress(taskId);
+        if (onTaskUpdated) {
+          onTaskUpdated();
+        }
+      }
+    } catch (e) {
+      console.error('Error adding subtask:', e);
+      setToast({ message: 'サブタスクの追加に失敗しました', type: 'error' });
+    } finally {
+      setSubtaskLoading(false);
+    }
+  };
+
+  // サブタスクの削除
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    if (!taskId) return;
+
+    setSubtaskLoading(true);
+    try {
+      const isPlaceholderUrl = 
+        process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder') || 
+        !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co';
+
+      if (isPlaceholderUrl) {
+        // モックデータ環境：ローカルstateから削除
+        setSubtasks(subtasks.filter((s) => s.id !== subtaskId));
+        setToast({ message: 'サブタスクを削除しました（モックデータ）', type: 'success' });
+        return;
+      }
+
+      await deleteSubtask(subtaskId);
+      setSubtasks(subtasks.filter((s) => s.id !== subtaskId));
+      setToast({ message: 'サブタスクを削除しました', type: 'success' });
+      
+      // 進捗率を再計算
+      if (taskId) {
+        await recalculateTaskProgress(taskId);
+        if (onTaskUpdated) {
+          onTaskUpdated();
+        }
+      }
+    } catch (e) {
+      console.error('Error deleting subtask:', e);
+      setToast({ message: 'サブタスクの削除に失敗しました', type: 'error' });
+    } finally {
+      setSubtaskLoading(false);
+    }
+  };
+
+  // サブタスクのチェック状態をトグル
+  const handleToggleSubtask = async (subtaskId: string, completed: boolean) => {
+    if (!taskId) return;
+
+    setSubtaskLoading(true);
+    try {
+      const isPlaceholderUrl = 
+        process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder') || 
+        !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co';
+
+      if (isPlaceholderUrl) {
+        // モックデータ環境：ローカルstateを更新
+        setSubtasks(subtasks.map((s) => 
+          s.id === subtaskId ? { ...s, completed: !completed } : s
+        ));
+        setToast({ message: 'チェック状態を更新しました（モックデータ）', type: 'success' });
+        return;
+      }
+
+      await updateSubtask(subtaskId, { completed: !completed });
+      setSubtasks(subtasks.map((s) => 
+        s.id === subtaskId ? { ...s, completed: !completed } : s
+      ));
+      setToast({ message: 'チェック状態を更新しました', type: 'success' });
+      
+      // 進捗率を再計算
+      if (taskId) {
+        await recalculateTaskProgress(taskId);
+        if (onTaskUpdated) {
+          onTaskUpdated();
+        }
+      }
+    } catch (e) {
+      console.error('Error toggling subtask:', e);
+      setToast({ message: 'チェック状態の更新に失敗しました', type: 'error' });
+    } finally {
+      setSubtaskLoading(false);
+    }
+  };
+
+  // 進捗率の計算（ローカル）
+  const calculateProgress = () => {
+    if (subtasks.length === 0) return 0;
+    const completedCount = subtasks.filter((s) => s.completed).length;
+    return Math.round((completedCount / subtasks.length) * 100);
+  };
 
   if (!isOpen) return null;
 
@@ -457,6 +635,97 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskId, onTaskUp
                     <option value={RecurringType.Monthly}>毎月</option>
                   </select>
                 </div>
+
+                {/* チェックリスト（サブタスク） */}
+                {taskId && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        チェックリスト
+                      </label>
+                      <span className="text-xs text-gray-500">
+                        進捗: {calculateProgress()}% ({subtasks.filter((s) => s.completed).length}/{subtasks.length})
+                      </span>
+                    </div>
+                    <div className="border border-gray-300 rounded-md p-3 space-y-2 max-h-64 overflow-y-auto">
+                      {subtasks.length === 0 ? (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          チェックリストがありません
+                        </p>
+                      ) : (
+                        subtasks.map((subtask) => (
+                          <div
+                            key={subtask.id}
+                            className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={subtask.completed}
+                              onChange={() => handleToggleSubtask(subtask.id, subtask.completed)}
+                              disabled={subtaskLoading}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <span
+                              className={`flex-1 text-sm ${
+                                subtask.completed
+                                  ? 'line-through text-gray-500'
+                                  : 'text-gray-900'
+                              }`}
+                            >
+                              {subtask.text}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteSubtask(subtask.id)}
+                              disabled={subtaskLoading}
+                              className="text-red-500 hover:text-red-700 text-sm disabled:opacity-50"
+                              title="削除"
+                            >
+                              <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={newSubtaskText}
+                        onChange={(e) => setNewSubtaskText(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !subtaskLoading) {
+                            handleAddSubtask();
+                          }
+                        }}
+                        placeholder="新しいチェック項目を入力"
+                        disabled={subtaskLoading}
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                      />
+                      <button
+                        onClick={handleAddSubtask}
+                        disabled={subtaskLoading || !newSubtaskText.trim()}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {subtaskLoading ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          '追加'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

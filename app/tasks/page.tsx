@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getTasks } from '@/lib/tasks';
 import TaskTable from '@/components/TaskTable';
 import TaskModal from '@/components/TaskModal';
@@ -11,6 +11,18 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  // Filter and search state
+  const [selectedStatus, setSelectedStatus] = useState<Status | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Sort state
+  const [sortColumn, setSortColumn] = useState<'title' | 'status' | 'end_date' | 'progress' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // モックデータ定義（PROJECT-PLAN.mdのPhaseに基づく）
   // 実際のプロジェクト進捗をタスクとして管理し、使用感を確認する
@@ -187,6 +199,67 @@ export default function TasksPage() {
     fetchTasks();
   }, []);
 
+  // フィルター・検索処理（useMemoでメモ化）
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      // ステータスフィルター
+      const matchesStatus = selectedStatus === 'all' || task.status === selectedStatus;
+
+      // 検索クエリフィルター（タスク名・説明文の部分一致）
+      const matchesSearch =
+        searchQuery === '' ||
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [tasks, selectedStatus, searchQuery]);
+
+  // ソート処理（useMemoでメモ化）
+  const sortedTasks = useMemo(() => {
+    if (!sortColumn) return filteredTasks;
+
+    const sorted = [...filteredTasks].sort((a, b) => {
+      let aValue: string | number = '';
+      let bValue: string | number = '';
+
+      switch (sortColumn) {
+        case 'title':
+          aValue = a.title.toLowerCase();
+          bValue = b.title.toLowerCase();
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'end_date':
+          aValue = a.end_date;
+          bValue = b.end_date;
+          break;
+        case 'progress':
+          aValue = a.progress || 0;
+          bValue = b.progress || 0;
+          break;
+      }
+
+      if (aValue < bValue) return sortDirection === 'ascending' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'ascending' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [filteredTasks, sortColumn, sortDirection]);
+
+  // ページネーション処理（useMemoでメモ化）
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return sortedTasks.slice(startIndex, endIndex);
+  }, [sortedTasks, currentPage, pageSize]);
+
+  // 総ページ数の計算
+  const totalPages = Math.ceil(sortedTasks.length / pageSize);
+
   // タスク更新後のコールバック
   const handleTaskUpdated = () => {
     fetchTasks();
@@ -210,6 +283,47 @@ export default function TasksPage() {
     setSelectedTaskId(null);
   };
 
+  // フィルタークリア
+  const handleClearFilters = () => {
+    setSelectedStatus('all');
+    setSearchQuery('');
+  };
+
+  // 検索入力ハンドラ（debounceなしで即座に反映）
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
+  // ステータスフィルター変更ハンドラ
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setSelectedStatus(value === 'all' ? 'all' : value as Status);
+    setCurrentPage(1); // フィルター変更時は1ページ目に戻る
+  };
+
+  // ソートハンドラ
+  const handleSort = (column: 'title' | 'status' | 'end_date' | 'progress') => {
+    if (sortColumn === column) {
+      // 同じカラムをクリックした場合は方向を切り替え
+      setSortDirection(sortDirection === 'ascending' ? 'descending' : 'ascending');
+    } else {
+      // 異なるカラムをクリックした場合は昇順で開始
+      setSortColumn(column);
+      setSortDirection('ascending');
+    }
+  };
+
+  // ページサイズ変更ハンドラ
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPageSize(Number(e.target.value));
+    setCurrentPage(1); // ページサイズ変更時は1ページ目に戻る
+  };
+
+  // ページ変更ハンドラ
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -224,21 +338,37 @@ export default function TasksPage() {
         {/* ツールバー */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-4">
-            {/* フィルター（将来実装） */}
-            <select className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-              <option>すべてのステータス</option>
-              <option>未着手</option>
-              <option>進行中</option>
-              <option>完了</option>
-              <option>承認済み</option>
+            {/* ステータスフィルター */}
+            <select
+              value={selectedStatus}
+              onChange={handleStatusChange}
+              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+            >
+              <option value="all">すべてのステータス</option>
+              <option value={Status.NotStarted}>未着手</option>
+              <option value={Status.InProgress}>進行中</option>
+              <option value={Status.Completed}>完了</option>
+              <option value={Status.Approved}>承認済み</option>
             </select>
 
-            {/* 検索（将来実装） */}
+            {/* タスク検索 */}
             <input
               type="search"
               placeholder="タスクを検索..."
+              value={searchQuery}
+              onChange={handleSearchChange}
               className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm w-64"
             />
+
+            {/* フィルタークリアボタン */}
+            {(selectedStatus !== 'all' || searchQuery !== '') && (
+              <button
+                onClick={handleClearFilters}
+                className="text-sm text-gray-600 hover:text-gray-900 underline"
+              >
+                フィルタークリア
+              </button>
+            )}
           </div>
 
           {/* 新規作成ボタン */}
@@ -295,8 +425,96 @@ export default function TasksPage() {
           </div>
         )}
 
+        {/* 検索結果件数 */}
+        {(selectedStatus !== 'all' || searchQuery !== '') && (
+          <div className="mb-4 text-sm text-gray-600">
+            {filteredTasks.length}件のタスクが見つかりました（全{tasks.length}件中）
+          </div>
+        )}
+
         {/* タスクテーブル */}
-        <TaskTable tasks={tasks} onTaskClick={handleTaskClick} />
+        <TaskTable
+          tasks={paginatedTasks}
+          onTaskClick={handleTaskClick}
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          onSort={handleSort}
+        />
+
+        {/* ページネーション */}
+        {sortedTasks.length > 0 && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white px-4 py-3 border border-gray-200 rounded-lg">
+            {/* ページサイズ選択 */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-700">表示件数:</span>
+              <select
+                value={pageSize}
+                onChange={handlePageSizeChange}
+                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+              >
+                <option value={10}>10件</option>
+                <option value={25}>25件</option>
+                <option value={50}>50件</option>
+                <option value={100}>100件</option>
+              </select>
+              <span className="text-sm text-gray-600">
+                {sortedTasks.length}件中 {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, sortedTasks.length)}件を表示
+              </span>
+            </div>
+
+            {/* ページ番号ボタン */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                {/* 前へボタン */}
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  前へ
+                </button>
+
+                {/* ページ番号 */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  // 最初の3ページ、現在のページ周辺、最後の3ページを表示
+                  if (
+                    page <= 3 ||
+                    page >= totalPages - 2 ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`px-3 py-1 text-sm border rounded-md transition-colors ${
+                          currentPage === page
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  } else if (page === 4 && currentPage > 5) {
+                    return <span key={page} className="px-2 text-gray-500">...</span>;
+                  } else if (page === totalPages - 3 && currentPage < totalPages - 4) {
+                    return <span key={page} className="px-2 text-gray-500">...</span>;
+                  }
+                  return null;
+                })}
+
+                {/* 次へボタン */}
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  次へ
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 統計情報 */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-4">
